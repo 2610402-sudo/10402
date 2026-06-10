@@ -9,3 +9,418 @@
     <div>.........</div>
 </body>
 </html>
+
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<title>RemortPC</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-database-compat.js"></script>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&family=Noto+Sans+KR:wght@400;500;700&display=swap');
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+:root{
+  --bg:#0c0c0f;--s1:#131316;--s2:#1a1a1f;--s3:#222228;
+  --border:rgba(255,255,255,0.07);--border2:rgba(255,255,255,0.13);
+  --text:#ededf0;--muted:#666;--muted2:#999;
+  --blue:#4f9eff;--green:#00e5a0;--red:#ff5f6d;--yellow:#ffb84d;
+  --mono:'JetBrains Mono',monospace;--sans:'Noto Sans KR',sans-serif;
+}
+html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--text);}
+
+/* ── 시작화면 ── */
+#startScreen{
+  height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:32px;padding:24px;
+}
+.logo{font-family:var(--mono);font-size:28px;font-weight:700;color:var(--blue);letter-spacing:-1px;}
+.logo em{color:var(--green);font-style:normal;}
+.start-card{
+  background:var(--s1);border:1px solid var(--border2);border-radius:20px;
+  padding:32px;width:100%;max-width:380px;display:flex;flex-direction:column;gap:20px;
+}
+.start-card h2{font-size:16px;font-weight:500;color:var(--muted2);text-align:center;}
+.big-btn{
+  width:100%;padding:16px;border-radius:12px;border:none;
+  font-family:var(--sans);font-size:16px;font-weight:700;cursor:pointer;
+  transition:all .15s;
+}
+.big-btn:active{transform:scale(.97);}
+.btn-host{background:var(--blue);color:#fff;}
+.btn-host:hover{background:#6aadff;}
+.divider{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px;}
+.divider::before,.divider::after{content:'';flex:1;height:1px;background:var(--border2);}
+.room-input-wrap{display:flex;flex-direction:column;gap:10px;}
+.room-input{
+  width:100%;padding:14px 16px;border-radius:12px;
+  background:var(--s2);border:1.5px solid var(--border2);
+  color:var(--text);font-family:var(--mono);font-size:22px;font-weight:700;
+  text-align:center;letter-spacing:4px;text-transform:uppercase;
+  outline:none;transition:border-color .2s;
+}
+.room-input:focus{border-color:var(--blue);}
+.room-input::placeholder{color:var(--muted);letter-spacing:2px;font-size:16px;font-weight:400;}
+.btn-remote{background:var(--s3);color:var(--green);border:1.5px solid rgba(0,229,160,.3);}
+.btn-remote:hover{background:rgba(0,229,160,.1);}
+
+/* ── 공통 레이아웃 ── */
+#app{display:none;height:100vh;flex-direction:column;}
+nav{
+  height:52px;padding:0 18px;background:var(--s1);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;flex-shrink:0;
+}
+.nav-logo{font-family:var(--mono);font-size:14px;font-weight:700;color:var(--blue);}
+.nav-logo em{color:var(--green);font-style:normal;}
+.nav-room{font-family:var(--mono);font-size:13px;color:var(--muted2);}
+.nav-room strong{color:var(--green);letter-spacing:2px;}
+.conn-pill{
+  display:flex;align-items:center;gap:6px;padding:5px 12px;
+  border-radius:100px;background:var(--s2);border:1px solid var(--border2);
+  font-family:var(--mono);font-size:11px;color:var(--muted);transition:all .3s;
+}
+.conn-pill.live{color:var(--green);border-color:rgba(0,229,160,.25);background:rgba(0,229,160,.06);}
+.pip{width:6px;height:6px;border-radius:50%;background:var(--muted);transition:all .3s;}
+.pip.live{background:var(--green);box-shadow:0 0 6px var(--green);animation:blink 1.5s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* ── HOST ── */
+#hostPanel{flex:1;display:none;overflow:hidden;}
+#hostPanel.on{display:flex;}
+.screen{
+  flex:1;background:#06060a;position:relative;
+  display:flex;align-items:center;justify-content:center;overflow:hidden;
+}
+.grid-bg{
+  position:absolute;inset:0;
+  background-image:linear-gradient(rgba(79,158,255,.04) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(79,158,255,.04) 1px,transparent 1px);
+  background-size:44px 44px;
+}
+.scanlines{
+  position:absolute;inset:0;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 3px,rgba(255,255,255,.012) 3px,rgba(255,255,255,.012) 4px);
+}
+.screen-msg{text-align:center;z-index:2;padding:2rem;}
+.screen-msg .ico{font-size:48px;margin-bottom:16px;}
+.screen-msg h1{font-family:var(--mono);font-size:20px;font-weight:600;color:#ddd;margin-bottom:8px;}
+.screen-msg p{font-size:13px;color:var(--muted);}
+.cur{position:absolute;z-index:10;pointer-events:none;transform:translate(-50%,-50%);transition:left .08s,top .08s;}
+.cur-dot{width:14px;height:14px;border-radius:50%;background:var(--blue);box-shadow:0 0 14px var(--blue);}
+.cur.clicking .cur-dot{animation:cclick .3s;}
+@keyframes cclick{50%{transform:scale(2);background:#fff;}}
+.chip{
+  position:absolute;bottom:20px;left:50%;transform:translateX(-50%);
+  padding:7px 18px;border-radius:100px;
+  background:rgba(79,158,255,.15);border:1px solid rgba(79,158,255,.3);
+  font-size:12px;font-family:var(--mono);color:var(--blue);
+  opacity:0;transition:opacity .3s;pointer-events:none;z-index:5;
+}
+.chip.show{opacity:1;}
+.sidebar{
+  width:260px;background:var(--s1);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;overflow-y:auto;flex-shrink:0;
+}
+.sec{padding:16px;border-bottom:1px solid var(--border);}
+.sec-label{font-size:10px;font-family:var(--mono);color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:10px;}
+.log-list{list-style:none;display:flex;flex-direction:column;gap:3px;max-height:200px;overflow-y:auto;}
+.log-item{display:flex;justify-content:space-between;font-size:11px;font-family:var(--mono);padding:4px 0;border-bottom:1px solid var(--border);color:#bbb;}
+.log-t{color:var(--muted);font-size:10px;}
+
+/* ── REMOTE ── */
+#remotePanel{flex:1;display:none;overflow-y:auto;padding:16px;justify-content:center;}
+#remotePanel.on{display:flex;}
+.phone{width:100%;max-width:360px;display:flex;flex-direction:column;gap:10px;}
+
+.tpad{
+  background:var(--s2);border:1px solid var(--border2);border-radius:14px;
+  height:180px;position:relative;overflow:hidden;
+  cursor:crosshair;user-select:none;touch-action:none;
+  display:flex;align-items:center;justify-content:center;
+}
+.tpad-hint{font-size:12px;color:var(--muted);font-family:var(--mono);pointer-events:none;}
+.tpad-dot{
+  position:absolute;width:14px;height:14px;border-radius:50%;
+  background:var(--blue);box-shadow:0 0 10px var(--blue);
+  transform:translate(-50%,-50%);pointer-events:none;display:none;
+}
+.tc{position:absolute;width:14px;height:14px;border-color:var(--border2);border-style:solid;border-width:0;}
+.tc.tl{top:8px;left:8px;border-top-width:1.5px;border-left-width:1.5px;border-radius:3px 0 0 0;}
+.tc.tr{top:8px;right:8px;border-top-width:1.5px;border-right-width:1.5px;border-radius:0 3px 0 0;}
+.tc.bl{bottom:8px;left:8px;border-bottom-width:1.5px;border-left-width:1.5px;border-radius:0 0 0 3px;}
+.tc.br{bottom:8px;right:8px;border-bottom-width:1.5px;border-right-width:1.5px;border-radius:0 0 3px 0;}
+
+.btns{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.rb{
+  padding:14px 6px;border-radius:12px;border:1px solid var(--border2);
+  background:var(--s2);color:var(--text);cursor:pointer;
+  font-family:var(--sans);font-size:12px;font-weight:500;
+  display:flex;flex-direction:column;align-items:center;gap:6px;transition:all .12s;
+}
+.rb:active{transform:scale(.94);background:var(--s3);}
+.rb .ico{font-size:22px;}
+.rb.b{border-color:rgba(79,158,255,.3);background:rgba(79,158,255,.1);color:var(--blue);}
+.rb.g{border-color:rgba(0,229,160,.3);background:rgba(0,229,160,.08);color:var(--green);}
+.rb.r{border-color:rgba(255,95,109,.3);background:rgba(255,95,109,.08);color:var(--red);}
+.rb.y{border-color:rgba(255,184,77,.3);background:rgba(255,184,77,.08);color:var(--yellow);}
+.vrow{display:flex;align-items:center;gap:10px;background:var(--s2);border:1px solid var(--border);border-radius:12px;padding:12px 14px;}
+.vrow label{font-size:13px;white-space:nowrap;}
+.vrow input{flex:1;accent-color:var(--blue);}
+.vrow span{font-size:12px;font-family:var(--mono);color:var(--blue);min-width:36px;text-align:right;}
+</style>
+</head>
+<body>
+
+<!-- 시작 화면 -->
+<div id="startScreen">
+  <div class="logo">Remort<em>PC</em></div>
+  <div class="start-card">
+    <h2>어떤 기기인가요?</h2>
+
+    <button class="big-btn btn-host" onclick="startHost()">
+      🖥️ 컴퓨터 (방 만들기)
+    </button>
+
+    <div class="divider">또는 방 번호 입력</div>
+
+    <div class="room-input-wrap">
+      <input class="room-input" id="roomInput" maxlength="6" placeholder="방 번호 입력" oninput="this.value=this.value.toUpperCase()">
+      <button class="big-btn btn-remote" onclick="startRemote()">
+        📱 폰 리모컨으로 접속
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- 앱 -->
+<div id="app">
+  <nav>
+    <div class="nav-logo">Remort<em>PC</em></div>
+    <div class="nav-room">Room: <strong id="navRoom">——</strong></div>
+    <div class="conn-pill" id="connPill">
+      <div class="pip" id="pip"></div>
+      <span id="connLabel">대기중</span>
+    </div>
+  </nav>
+
+  <!-- HOST -->
+  <div id="hostPanel">
+    <div class="screen" id="screenWrap">
+      <div class="grid-bg"></div>
+      <div class="scanlines"></div>
+      <div class="cur" id="cur" style="left:50%;top:50%;"><div class="cur-dot"></div></div>
+      <div class="screen-msg" id="screenMsg">
+        <div class="ico">🖥️</div>
+        <h1 id="screenTitle">폰 연결 대기 중</h1>
+        <p id="screenSub">폰에서 방 번호 <span id="roomDisplay" style="color:var(--green);font-family:var(--mono);font-weight:700;"></span> 입력하세요</p>
+      </div>
+      <div class="chip" id="chip"></div>
+    </div>
+    <div class="sidebar">
+      <div class="sec">
+        <div class="sec-label">방 번호</div>
+        <div style="font-family:var(--mono);font-size:32px;font-weight:700;color:var(--green);letter-spacing:4px;" id="bigRoom">——</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:6px;">폰에서 이 번호를 입력하세요</div>
+      </div>
+      <div class="sec">
+        <div class="sec-label">연결 상태</div>
+        <div style="font-size:14px;font-family:var(--mono);" id="sideConn">미연결</div>
+      </div>
+      <div class="sec" style="flex:1;">
+        <div class="sec-label">입력 로그</div>
+        <ul class="log-list" id="logList">
+          <li class="log-item"><span style="color:var(--muted);">대기중...</span></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- REMOTE -->
+  <div id="remotePanel">
+    <div class="phone">
+      <div class="tpad" id="tpad">
+        <div class="tc tl"></div><div class="tc tr"></div>
+        <div class="tc bl"></div><div class="tc br"></div>
+        <div class="tpad-hint" id="tHint">드래그 → 커서 이동</div>
+        <div class="tpad-dot" id="tDot"></div>
+      </div>
+      <div class="btns">
+        <button class="rb b" onclick="send('click','🖱️ 왼쪽 클릭')"><span class="ico">🖱️</span>왼쪽 클릭</button>
+        <button class="rb" onclick="send('rclick','📋 오른쪽 클릭')"><span class="ico">📋</span>오른쪽 클릭</button>
+        <button class="rb g" onclick="send('sup','⬆️ 스크롤 위')"><span class="ico">⬆️</span>스크롤 위</button>
+        <button class="rb g" onclick="send('sdown','⬇️ 스크롤 아래')"><span class="ico">⬇️</span>스크롤 아래</button>
+        <button class="rb" onclick="send('enter','↵ Enter')"><span class="ico">↵</span>Enter</button>
+        <button class="rb" onclick="send('back','◀ 뒤로가기')"><span class="ico">◀</span>뒤로가기</button>
+        <button class="rb y" onclick="send('play','⏯️ 재생/정지')"><span class="ico">⏯️</span>재생/정지</button>
+        <button class="rb r" onclick="send('lock','🔒 화면 잠금')"><span class="ico">🔒</span>화면 잠금</button>
+      </div>
+      <div class="vrow">
+        <label>🔊 볼륨</label>
+        <input type="range" min="0" max="100" value="60" oninput="sendVol(this.value)">
+        <span id="vVal">60%</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const firebaseConfig = {
+  apiKey: "AIzaSyCYn4An9OL5ooV5juB-fLpnzxEzWp4maNI",
+  authDomain: "remort-pc.firebaseapp.com",
+  databaseURL: "https://remort-pc-default-rtdb.firebaseio.com",
+  projectId: "remort-pc",
+  storageBucket: "remort-pc.firebasestorage.app",
+  messagingSenderId: "1071578208697",
+  appId: "1:1071578208697:web:3562e91747fe0a7f30fe68"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+
+let ROOM = '';
+
+function startHost() {
+  ROOM = Math.random().toString(36).substring(2,8).toUpperCase();
+  launch('host');
+}
+
+function startRemote() {
+  const v = document.getElementById('roomInput').value.trim().toUpperCase();
+  if (v.length < 4) { alert('방 번호를 입력해주세요!'); return; }
+  ROOM = v;
+  launch('remote');
+}
+
+function launch(mode) {
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('app').style.display = 'flex';
+  document.getElementById('app').style.flexDirection = 'column';
+  document.getElementById('navRoom').textContent = ROOM;
+  document.getElementById('bigRoom').textContent = ROOM;
+  document.getElementById('roomDisplay').textContent = ROOM;
+
+  if (mode === 'host') {
+    document.getElementById('hostPanel').classList.add('on');
+    watchConn(); watchCmd();
+  } else {
+    document.getElementById('remotePanel').classList.add('on');
+    alive(); setInterval(alive, 8000);
+  }
+}
+
+function setConn(on) {
+  document.getElementById('pip').classList.toggle('live', on);
+  document.getElementById('connPill').classList.toggle('live', on);
+  document.getElementById('connLabel').textContent = on ? '연결됨' : '대기중';
+  document.getElementById('sideConn') && (document.getElementById('sideConn').textContent = on ? '📱 폰 연결됨' : '미연결');
+  if (on) {
+    document.getElementById('screenTitle').textContent = '폰으로 제어 중';
+    document.getElementById('screenSub').textContent = 'Room: ' + ROOM;
+  }
+}
+
+function watchConn() {
+  db.ref('rooms/'+ROOM+'/alive').on('value', s => setConn(!!s.val()));
+}
+
+function watchCmd() {
+  db.ref('rooms/'+ROOM+'/cmd').on('value', s => {
+    const d = s.val(); if (!d) return;
+    handleCmd(d);
+  });
+}
+
+function handleCmd(d) {
+  const {type, label, x, y} = d;
+  addLog(label||type);
+  showChip(label||type);
+  if (x!=null) moveCursor(x, y);
+  const map = {
+    click:'🖱️ 왼쪽 클릭', rclick:'📋 오른쪽 클릭',
+    sup:'⬆️ 스크롤 위', sdown:'⬇️ 스크롤 아래',
+    enter:'↵ Enter', back:'◀ 뒤로가기',
+    play:'⏯️ 재생/정지', lock:'🔒 화면 잠금',
+    vol:'🔊 볼륨 '+(d.val||'')+'%'
+  };
+  if (map[type]) {
+    document.getElementById('screenTitle').textContent = map[type];
+    setTimeout(()=>{ document.getElementById('screenTitle').textContent='폰으로 제어 중'; }, 2500);
+  }
+  if (type==='click') {
+    const c=document.getElementById('cur');
+    c.classList.add('clicking');
+    setTimeout(()=>c.classList.remove('clicking'),400);
+  }
+}
+
+function moveCursor(xR, yR) {
+  const w = document.getElementById('screenWrap');
+  document.getElementById('cur').style.left = (w.clientWidth*xR)+'px';
+  document.getElementById('cur').style.top = (w.clientHeight*yR)+'px';
+}
+
+function showChip(msg) {
+  const c=document.getElementById('chip');
+  c.textContent='→ '+msg; c.classList.add('show');
+  clearTimeout(c._t); c._t=setTimeout(()=>c.classList.remove('show'),2000);
+}
+
+function addLog(msg) {
+  const list=document.getElementById('logList');
+  if(list.children.length===1&&list.children[0].querySelector('span')?.style.color) list.innerHTML='';
+  const n=new Date();
+  const t=[n.getHours(),n.getMinutes(),n.getSeconds()].map(x=>x.toString().padStart(2,'0')).join(':');
+  const li=document.createElement('li'); li.className='log-item';
+  li.innerHTML=`<span>${msg}</span><span class="log-t">${t}</span>`;
+  list.insertBefore(li,list.firstChild);
+  if(list.children.length>20) list.removeChild(list.lastChild);
+}
+
+function alive() {
+  db.ref('rooms/'+ROOM+'/alive').set(true);
+}
+
+function send(type, label) {
+  alive();
+  db.ref('rooms/'+ROOM+'/cmd').set({type, label, ts:Date.now()});
+}
+
+function sendVol(v) {
+  document.getElementById('vVal').textContent=v+'%';
+  send('vol','🔊 볼륨 '+v+'%');
+  db.ref('rooms/'+ROOM+'/cmd').set({type:'vol', label:'🔊 볼륨 '+v+'%', val:v, ts:Date.now()});
+}
+
+// 트랙패드
+let lx=null,ly=null;
+const tpad=document.getElementById('tpad');
+const tDot=document.getElementById('tDot');
+const tHint=document.getElementById('tHint');
+
+function tMove(ex,ey){
+  const r=tpad.getBoundingClientRect();
+  const xR=Math.max(0,Math.min(1,(ex-r.left)/r.width));
+  const yR=Math.max(0,Math.min(1,(ey-r.top)/r.height));
+  tDot.style.display='block'; tHint.style.display='none';
+  tDot.style.left=(xR*100)+'%'; tDot.style.top=(yR*100)+'%';
+  if(lx!==null){
+    const dx=xR-lx,dy=yR-ly;
+    if(Math.abs(dx)>.005||Math.abs(dy)>.005){
+      const nx=Math.max(0,Math.min(1,.5+dx*3));
+      const ny=Math.max(0,Math.min(1,.5+dy*3));
+      alive();
+      db.ref('rooms/'+ROOM+'/cmd').set({type:'move',label:'커서 이동',x:nx,y:ny,ts:Date.now()});
+    }
+  }
+  lx=xR;ly=yR;
+}
+tpad.addEventListener('mousemove',e=>{if(e.buttons)tMove(e.clientX,e.clientY);});
+tpad.addEventListener('mousedown',e=>tMove(e.clientX,e.clientY));
+tpad.addEventListener('mouseup',()=>{lx=null;ly=null;});
+tpad.addEventListener('touchmove',e=>{e.preventDefault();tMove(e.touches[0].clientX,e.touches[0].clientY);},{passive:false});
+tpad.addEventListener('touchstart',e=>tMove(e.touches[0].clientX,e.touches[0].clientY));
+tpad.addEventListener('touchend',()=>{lx=null;ly=null;});
+</script>
+</body>
+</html>
